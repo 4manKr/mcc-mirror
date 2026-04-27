@@ -77,7 +77,7 @@ def main():
     if not args.skip_main:
         log.info("\n" + "="*64 + "\n  PIPELINE 1/3 — Main MCC website\n" + "="*64)
         try:
-            s = run_main_pipeline(args.main_mode)
+            s = run_main_pipeline(args.main_mode, limit=args.limit)
             if s:
                 summaries.append(s)
         except Exception as e:

@@ -714,11 +714,11 @@ class DriveUploader:
 # ---------------------------------------------------------------------------
 
 
-def run(mode: str):
+def run(mode: str, limit: int | None = None):
     cfg = load_config()
     logs_dir = Path(cfg["paths"]["logs"]).resolve()
     log = setup_logging(logs_dir)
-    log.info(f"=== MCC pipeline: mode={mode} ===")
+    log.info(f"=== MCC pipeline: mode={mode}  limit={limit} ===")
 
     manifest = Manifest(Path(cfg["paths"]["manifest"]).resolve())
     run_id = datetime.now(timezone.utc).strftime("run-%Y%m%d-%H%M%S")
@@ -730,6 +730,9 @@ def run(mode: str):
 
     new = updated = skipped = failed = 0
     records = crawler.crawl()
+    if limit and limit > 0:
+        log.info(f"--limit {limit} set; trimming {len(records)} crawled PDFs to first {limit} (smoke test)")
+        records = records[:limit]
     total = len(records)
     log.info(f"starting downloads: {total} pdf(s) queued")
 
@@ -826,8 +829,9 @@ def run(mode: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["crawl-only", "full", "delta"], default="crawl-only")
+    ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()
-    run(args.mode)
+    run(args.mode, limit=args.limit)
 
 
 if __name__ == "__main__":
