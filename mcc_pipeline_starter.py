@@ -382,13 +382,23 @@ class Crawler:
                     if resolved and resolved not in pdf_records:
                         # If breadcrumb is empty or just "Home", augment with
                         # category derived from the page URL's path segments.
-                        bc = breadcrumb
+                        bc = list(breadcrumb)
                         meaningful = [c for c in bc if c.lower() not in
                                       ("home", "mcc", "medical counselling committee")]
                         if not meaningful:
                             url_bc = self._breadcrumb_from_url(final_url)
                             if url_bc:
                                 bc = bc + url_bc
+                        if heading:
+                            section = heading.strip()[:80]
+                            if (section
+                                and (not bc or section.lower() != bc[-1].lower())
+                                and section.lower() not in (
+                                    "home", "mcc", "medical counselling committee",
+                                    "menu", "main menu", "navigation",
+                                    "skip to main content")):
+                                bc = bc + [section]
+                        bc = bc[:MAX_BREADCRUMB_DEPTH]
                         pdf_records[resolved] = PdfRecord(
                             url=resolved,
                             breadcrumb=bc,
