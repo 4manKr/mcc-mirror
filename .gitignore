@@ -1,0 +1,46 @@
+# Secrets — NEVER commit these
+credentials/
+*.json.local
+*.local.txt
+_secrets_to_paste.local.txt
+
+# Local config override (in CI we patch config.yaml from env vars,
+# but locally you may have an app password in it)
+config.local.yaml
+
+# State files — restored from Drive in CI, local-only otherwise
+manifest.db
+manifest.db-*
+*.db-journal
+
+# Local staging directories (large; ephemeral)
+staging/
+MCC-Staging/
+MCC-Admissions-Staging/
+
+# Logs
+logs/
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Playwright artifacts
+playwright-report/
+test-results/
+
+# Debug dumps
+debug_page*.html
+debug_page*.png

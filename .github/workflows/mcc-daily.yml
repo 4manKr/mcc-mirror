@@ -1,0 +1,87 @@
+name: MCC Daily Mirror
+
+# Schedule: 01:30 UTC = 07:00 IST every day.
+# Also runs manually via the "Run workflow" button on the Actions tab.
+on:
+  schedule:
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+    inputs:
+      main_mode:
+        description: "Main pipeline mode"
+        type: choice
+        options: [delta, full, crawl-only]
+        default: delta
+      limit:
+        description: "Per-course institute limit (leave blank for full run)"
+        required: false
+        default: ""
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240        # 4-hour ceiling; typical run ~30-90 min
+    concurrency:
+      group: mcc-daily          # never two parallel runs (would corrupt state)
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Inject secrets and patch config
+        env:
+          GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+          GOOGLE_OAUTH_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_JSON }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+        run: python scripts/inject_secrets.py
+
+      - name: Run all pipelines
+        env:
+          MCC_ADMISSIONS_STAGING: /tmp/mcc-admissions-staging
+        run: |
+          MAIN_MODE="${{ github.event.inputs.main_mode || 'delta' }}"
+          LIMIT="${{ github.event.inputs.limit }}"
+          ARGS="--main-mode $MAIN_MODE"
+          if [ -n "$LIMIT" ]; then
+            ARGS="$ARGS --limit $LIMIT"
+          fi
+          echo "Running: python run_all.py $ARGS"
+          python run_all.py $ARGS
+
+      - name: Upload run logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-logs-${{ github.run_id }}
+          path: |
+            logs/
+          retention-days: 14
+
+      - name: Upload refreshed token (if credentials still on disk)
+        # The Drive OAuth library auto-refreshes the access_token and rewrites
+        # token.json. We capture the refreshed copy as an artifact so you can
+        # re-paste it as a secret if Google ever rotates the refresh_token.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: refreshed-token-${{ github.run_id }}
+          path: credentials/token.json
+          retention-days: 30
+          if-no-files-found: ignore

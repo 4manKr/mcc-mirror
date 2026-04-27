@@ -1,0 +1,53 @@
+seed_url: "https://mcc.nic.in/"
+domain: "mcc.nic.in"
+
+paths:
+  # NOTE: staging is deliberately outside OneDrive so PDFs are not synced to cloud.
+  # Script auto-creates this folder. If C:\ is tight, change to another drive (e.g. D:\MCC-Staging).
+  staging: "C:/MCC-Staging"
+  admissions_staging: "C:/MCC-Admissions-Staging"
+  manifest: "./manifest.db"
+  logs: "./logs"
+
+streaming:
+  # When true, local PDF is deleted immediately after a successful Drive upload.
+  # Keeps disk usage to a single file at a time.
+  delete_after_upload: true
+
+crawler:
+  polite_delay_seconds: 1.0
+  max_pages: 2000
+  user_agent: "MCC-PDF-Mirror/1.0 teamtabindia@gmail.com"
+  respect_robots_txt: true
+
+drive:
+  # "oauth_user" = browser consent on first run, token cached after. Works for personal gmail.
+  # "service_account" only works on paid Google Workspace with a Shared Drive.
+  auth_type: "oauth_user"
+  oauth_client_secret_json: "./credentials/client_secret.json"
+  oauth_token_cache: "./credentials/token.json"
+  # Retained for reference; unused when auth_type is oauth_user.
+  service_account_json: "./credentials/mcc-pdf-mirror-281f64084a04.json"
+  root_folder_id: "1GHoHguP6DZGXBtcTRDWHNbbd-zACsDYY"
+  owner_email: "teamtabindia@gmail.com"
+
+naming:
+  format: "heading_plus_filename"
+  max_filename_chars: 120
+
+# Email acknowledgement after each run_all.py run.
+# Setup steps (one-time, ~5 min):
+#   1. Go to https://myaccount.google.com/apppasswords (must have 2-Step Verification on)
+#   2. Generate a new app password named "MCC Mirror"
+#   3. Paste the 16-char password (with or without spaces) into smtp.app_password below
+#   4. Test:  python run_all.py --skip-main --skip-admissions --no-email   (just to validate config loads)
+#   5. Real test:  python run_all.py --limit 1   (smoke run that sends an email)
+notify:
+  enabled: true
+  to: "teamtabindia@gmail.com"
+  skip_if_no_changes: true     # set to false to receive a daily heartbeat even on no-change days
+  smtp:
+    host: "smtp.gmail.com"
+    port: 587
+    sender: "teamtabindia@gmail.com"
+    app_password: ""           # leave empty — read from $GMAIL_APP_PASSWORD env var (set in CI; export locally if needed)
