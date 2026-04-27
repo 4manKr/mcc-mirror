@@ -64,6 +64,21 @@ def main() -> None:
     if notify_to:
         cfg["notify"]["to"] = notify_to
 
+    # WhatsApp via CallMeBot (optional — only enabled if both env vars present)
+    wa_phone = os.environ.get("WHATSAPP_PHONE", "").strip()
+    wa_key = os.environ.get("WHATSAPP_API_KEY", "").strip()
+    cfg["notify"].setdefault("whatsapp", {})
+    if wa_phone and wa_key:
+        cfg["notify"]["whatsapp"]["enabled"] = True
+        cfg["notify"]["whatsapp"]["phone"] = wa_phone
+        cfg["notify"]["whatsapp"]["api_key"] = wa_key
+        print(f"[inject_secrets] WhatsApp configured (phone {wa_phone[:4]}***, "
+              f"key len {len(wa_key)})")
+    else:
+        cfg["notify"]["whatsapp"]["enabled"] = False
+        print("[inject_secrets] WhatsApp NOT configured "
+              "(WHATSAPP_PHONE and/or WHATSAPP_API_KEY env vars missing)")
+
     cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False, default_flow_style=False),
                         encoding="utf-8")
     print("[inject_secrets] patched config.yaml (paths -> /tmp, app_password injected)")

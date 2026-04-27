@@ -51,3 +51,9 @@ notify:
     port: 587
     sender: "teamtabindia@gmail.com"
     app_password: ""           # leave empty — read from $GMAIL_APP_PASSWORD env var (set in CI; export locally if needed)
+  # WhatsApp via CallMeBot (free for personal use). Setup steps in README_CLOUD.md.
+  # In CI, phone + api_key come from $WHATSAPP_PHONE and $WHATSAPP_API_KEY env vars.
+  whatsapp:
+    enabled: true
+    phone: ""                  # e.g. "+919876543210" — leave empty here, set as GitHub secret
+    api_key: ""                # CallMeBot API key — leave empty here, set as GitHub secret

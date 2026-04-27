@@ -50,6 +50,8 @@ jobs:
           GOOGLE_OAUTH_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET_JSON }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NOTIFY_EMAIL_TO: ${{ secrets.NOTIFY_EMAIL_TO }}
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}
+          WHATSAPP_API_KEY: ${{ secrets.WHATSAPP_API_KEY }}
         run: python scripts/inject_secrets.py
 
       - name: Run all pipelines
