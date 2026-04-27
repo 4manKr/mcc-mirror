@@ -370,13 +370,22 @@ class Crawler:
                 if self._looks_like_pdf(abs_url):
                     resolved = self._resolve_pdf(abs_url)
                     if resolved and resolved not in pdf_records:
+                        # If breadcrumb is empty or just "Home", augment with
+                        # category derived from the page URL's path segments.
+                        bc = breadcrumb
+                        meaningful = [c for c in bc if c.lower() not in
+                                      ("home", "mcc", "medical counselling committee")]
+                        if not meaningful:
+                            url_bc = self._breadcrumb_from_url(final_url)
+                            if url_bc:
+                                bc = bc + url_bc
                         pdf_records[resolved] = PdfRecord(
                             url=resolved,
-                            breadcrumb=breadcrumb,
+                            breadcrumb=bc,
                             heading=heading or page_title,
                             link_text=link_text[:300],
                         )
-                        self.log.info(f"[pdf] {resolved}  ← {' > '.join(breadcrumb)}")
+                        self.log.info(f"[pdf] {resolved}  ← {' > '.join(bc)}")
                 elif self._same_domain(abs_url, self.domain) and nabs not in visited:
                     queue.append(PageNode(abs_url, link_text or page_title, breadcrumb))
 
@@ -391,6 +400,33 @@ class Crawler:
                 self._playwright.stop()
             except Exception:
                 pass
+
+    @staticmethod
+    def _breadcrumb_from_url(url: str) -> list[str]:
+        """Derive folder-name segments from a URL's path. Used as a fallback when
+        the page <title> can't yield a meaningful breadcrumb.
+
+        Example: https://mcc.nic.in/pgmedical/news-and-events/round-1-result.pdf
+                 -> ['Pgmedical', 'News And Events']
+        """
+        try:
+            path = urllib.parse.urlparse(url).path
+        except Exception:
+            return []
+        segments = [s for s in path.split("/") if s]
+        # Drop the last segment if it's a filename (.pdf, .aspx, .html etc.)
+        if segments and "." in segments[-1]:
+            segments = segments[:-1]
+        # Drop common path noise
+        noise = {"index", "default", "home", "main", "page", "pages"}
+        cleaned = []
+        for s in segments:
+            s_clean = re.sub(r"[\-_]+", " ", urllib.parse.unquote(s)).strip()
+            if not s_clean or s_clean.lower() in noise:
+                continue
+            # Title-case for folder readability
+            cleaned.append(" ".join(w.capitalize() for w in s_clean.split()))
+        return cleaned[:MAX_BREADCRUMB_DEPTH]
 
     @staticmethod
     def _nearest_heading(anchor) -> str:
