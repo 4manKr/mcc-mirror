@@ -334,6 +334,10 @@ class Crawler:
         pdf_records: dict[str, PdfRecord] = {}
         pages_done = 0
 
+        # For smoke tests with a small max_pdfs, skip the polite 1s delay between
+        # page fetches — we're only hitting a handful of pages anyway.
+        effective_delay = 0.1 if (max_pdfs and max_pdfs <= 5) else self.delay
+
         while queue and pages_done < self.max_pages:
             if max_pdfs and len(pdf_records) >= max_pdfs:
                 self.log.info(f"crawl: reached max_pdfs={max_pdfs}, stopping early")
@@ -351,7 +355,7 @@ class Crawler:
 
             html, final_url = self._fetch_html(node.url)
             pages_done += 1
-            time.sleep(self.delay)
+            time.sleep(effective_delay)
             if not html:
                 continue
 
@@ -361,6 +365,9 @@ class Crawler:
             breadcrumb = _extend_breadcrumb(node.breadcrumb, page_title)
 
             for a in soup.find_all("a", href=True):
+                # Hard stop: don't keep adding PDFs from the current page once limit is hit
+                if max_pdfs and len(pdf_records) >= max_pdfs:
+                    break
                 href = a["href"].strip()
                 if not href or href.startswith("#") or href.lower().startswith("javascript:"):
                     continue
