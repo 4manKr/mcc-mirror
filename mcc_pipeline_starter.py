@@ -327,7 +327,7 @@ class Crawler:
             self.log.warning(f"[playwright fail] {url}: {e}")
             return ""
 
-    def crawl(self) -> list[PdfRecord]:
+    def crawl(self, max_pdfs: int | None = None) -> list[PdfRecord]:
         seed = self.cfg["seed_url"]
         visited: set[str] = set()
         queue: list[PageNode] = [PageNode(seed, "Home", [])]
@@ -335,6 +335,9 @@ class Crawler:
         pages_done = 0
 
         while queue and pages_done < self.max_pages:
+            if max_pdfs and len(pdf_records) >= max_pdfs:
+                self.log.info(f"crawl: reached max_pdfs={max_pdfs}, stopping early")
+                break
             node = queue.pop(0)
             nurl = self._normalize(node.url)
             if nurl in visited:
@@ -729,10 +732,12 @@ def run(mode: str, limit: int | None = None):
     drive = DriveUploader(cfg, log) if mode in ("full", "delta") else None
 
     new = updated = skipped = failed = 0
-    records = crawler.crawl()
+    # Pass limit to crawler so it can short-circuit BFS as soon as it has enough
+    # PDFs (avoids 5-10 min full site walk for smoke tests).
+    records = crawler.crawl(max_pdfs=limit if limit and limit > 0 else None)
     if limit and limit > 0:
-        log.info(f"--limit {limit} set; trimming {len(records)} crawled PDFs to first {limit} (smoke test)")
         records = records[:limit]
+        log.info(f"--limit {limit} set; final upload set is {len(records)} pdf(s)")
     total = len(records)
     log.info(f"starting downloads: {total} pdf(s) queued")
 
