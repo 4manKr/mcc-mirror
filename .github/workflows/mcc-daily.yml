@@ -20,7 +20,7 @@ on:
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    timeout-minutes: 240        # 4-hour ceiling; typical run ~30-90 min
+    timeout-minutes: 360        # 4-hour ceiling; typical run ~30-90 min
     concurrency:
       group: mcc-daily          # never two parallel runs (would corrupt state)
       cancel-in-progress: false

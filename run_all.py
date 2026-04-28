@@ -82,6 +82,12 @@ def main():
                 summaries.append(s)
         except Exception as e:
             log.exception(f"main pipeline crashed: {e}")
+        # Persist manifest after main so it survives a later timeout
+        try:
+            push_state(cfg, drive, log)
+            log.info("interim state push (after main): OK")
+        except Exception as e:
+            log.warning(f"interim state push failed: {e}")
     else:
         log.info("(skipping main pipeline per --skip-main)")
 
@@ -103,6 +109,12 @@ def main():
                     summaries.append(s)
             except Exception as e:
                 log.exception(f"admissions [{course}] crashed: {e}")
+            # Persist state after each course so a timeout in UG does not lose PG progress
+            try:
+                push_state(cfg, drive, log)
+                log.info(f"interim state push (after {course}): OK")
+            except Exception as e:
+                log.warning(f"interim state push [{course}] failed: {e}")
     else:
         log.info("(skipping admissions pipelines per --skip-admissions)")
 

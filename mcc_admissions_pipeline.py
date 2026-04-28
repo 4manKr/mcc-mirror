@@ -321,6 +321,29 @@ def trigger_postback_and_capture(
     return False
 
 
+def _list_existing_codes(drive, folder_parts, log):
+    """Return {institute_code: drive_file_id} for files already in the folder.
+    Used so re-runs skip institutes whose PDFs are already on Drive."""
+    folder_id = drive._ensure_folder(tuple(folder_parts))
+    result = {}
+    token = None
+    while True:
+        resp = drive.svc.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields="nextPageToken,files(id,name)",
+            pageSize=1000, pageToken=token,
+        ).execute()
+        for f in resp.get("files", []):
+            m = re.match(r"^(\d{5,7})", f["name"])
+            if m:
+                result[m.group(1)] = f["id"]
+        token = resp.get("nextPageToken")
+        if not token:
+            break
+    log.info(f"[resume] folder {'/'.join(folder_parts)}: {len(result)} existing")
+    return result
+
+
 def _is_valid_pdf(path: Path) -> bool:
     try:
         with open(path, "rb") as f:
@@ -599,6 +622,31 @@ def write_and_upload_excel(rows: list[InstituteRow], drive: DriveUploader,
 # --------------------------------------------------------------------------- #
 
 
+def _list_drive_codes_in_folder(drive, folder_path, log):
+    """Returns {institute_code: drive_file_id} for files in `folder_path` whose
+    filename starts with a 5-7 digit institute code. Used to skip institutes
+    that have already been uploaded to Drive (resume-after-timeout)."""
+    folder_id = drive._ensure_folder(tuple(folder_path))
+    result = {}
+    page_token = None
+    while True:
+        resp = drive.svc.files().list(
+            q=f"'{folder_id}' in parents and trashed=false",
+            fields="nextPageToken,files(id,name)",
+            pageSize=1000,
+            pageToken=page_token,
+        ).execute()
+        for f in resp.get("files", []):
+            m = re.match(r"^(\d{5,7})", f["name"])
+            if m:
+                result[m.group(1)] = f["id"]
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    log.info(f"[skip-cache] {'/'.join(folder_path)}: {len(result)} existing files")
+    return result
+
+
 def run(listing_url: str, limit: int | None, headless: bool,
         course: str = "PG", drive: DriveUploader | None = None,
         log: logging.Logger | None = None):
@@ -710,6 +758,17 @@ def run(listing_url: str, limit: int | None, headless: bool,
             return
         log.info(f"Using boardId={board_id} for direct PDF handler URLs")
 
+        # Build skip-cache: list what's already on Drive so we don't re-upload.
+        # Critical for resume after timeout - lets re-runs continue from where left off.
+        existing_profiles = _list_drive_codes_in_folder(drive, profile_folder, log)
+        existing_bonds = _list_drive_codes_in_folder(drive, bond_folder, log)
+
+        # Resume support: query Drive once per course for already-uploaded codes
+        existing_profile_codes = _list_existing_codes(drive, profile_folder, log)
+        existing_bond_codes = _list_existing_codes(drive, bond_folder, log)
+        log.info(f"[{course}] resume: skip {len(existing_profile_codes)} profile + "
+                 f"{len(existing_bond_codes)} bond already on Drive")
+
         for i, rec in enumerate(rows, start=1):
             log.info(f"[{i}/{len(rows)}] {rec.code} — {rec.name[:70]}")
 
@@ -718,7 +777,7 @@ def run(listing_url: str, limit: int | None, headless: bool,
             # PROFILE — direct .ashx handler fetch
             profile_url = PROFILE_URL_TMPL.format(board=board_id, code=rec.code)
             dest = course_staging / f"profile_{rec.code}.pdf"
-            if fetch_pdf_via_session(page, profile_url, dest, log, f"profile/{rec.code}"):
+            if rec.code not in existing_profiles and fetch_pdf_via_session(page, profile_url, dest, log, f"profile/{rec.code}"):
                 try:
                     ur = PdfRecord(
                         url=profile_url,
@@ -740,7 +799,11 @@ def run(listing_url: str, limit: int | None, headless: bool,
             # BOND — direct .ashx handler fetch
             bond_url = BOND_URL_TMPL.format(board=board_id, code=rec.code)
             dest = course_staging / f"bond_{rec.code}.pdf"
-            if fetch_pdf_via_session(page, bond_url, dest, log, f"bond/{rec.code}"):
+            if rec.code in existing_bonds:
+                rec.bond_drive_id = existing_bonds[rec.code]
+                rec.bond_drive_link = f"https://drive.google.com/file/d/{rec.bond_drive_id}/view"
+                log.info(f"  [bond/{rec.code}] already on Drive, skipping")
+            elif fetch_pdf_via_session(page, bond_url, dest, log, f"bond/{rec.code}"):
                 try:
                     ur = PdfRecord(
                         url=bond_url,
