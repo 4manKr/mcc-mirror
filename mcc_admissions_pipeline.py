@@ -69,6 +69,20 @@ STAGING_DIR = Path(
 )
 
 
+
+def _drive_call_with_retry(fn, *args, **kwargs):
+    import ssl, socket, time as _t
+    last = None
+    for attempt in range(3):
+        try:
+            return fn(*args, **kwargs)
+        except (ssl.SSLEOFError, ssl.SSLError, socket.timeout, ConnectionError, OSError) as e:
+            last = e
+            wait = 2 ** attempt
+            print('[drive-retry] {}: {} -- retry {}/3 in {}s'.format(type(e).__name__, e, attempt+1, wait))
+            _t.sleep(wait)
+    raise last
+
 def _board_id_from_url(listing_url: str) -> str:
     from urllib.parse import urlparse, parse_qs
     qs = parse_qs(urlparse(listing_url).query)
@@ -328,11 +342,11 @@ def _list_existing_codes(drive, folder_parts, log):
     result = {}
     token = None
     while True:
-        resp = drive.svc.files().list(
+        resp = _drive_call_with_retry(lambda: drive.svc.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
             fields="nextPageToken,files(id,name)",
             pageSize=1000, pageToken=token,
-        ).execute()
+        ).execute())
         for f in resp.get("files", []):
             m = re.match(r"^(\d{5,7})", f["name"])
             if m:
@@ -597,22 +611,22 @@ def write_and_upload_excel(rows: list[InstituteRow], drive: DriveUploader,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         resumable=True,
     )
-    existing = drive.svc.files().list(
+    existing = _drive_call_with_retry(lambda: drive.svc.files().list(
         q=f"'{folder_id}' in parents and name='{file_name}' and trashed=false",
         fields="files(id)", pageSize=1,
-    ).execute().get("files", [])
+    ).execute()).get("files", [])
     if existing:
-        updated = drive.svc.files().update(
+        updated = _drive_call_with_retry(lambda: drive.svc.files().update(
             fileId=existing[0]["id"], media_body=media,
             body={"name": file_name}, fields="id",
-        ).execute()
+        ).execute())
         log.info(f"[{course}] Excel updated on Drive: {updated['id']}")
         return updated["id"]
-    created = drive.svc.files().create(
+    created = _drive_call_with_retry(lambda: drive.svc.files().create(
         media_body=media,
         body={"name": file_name, "parents": [folder_id]},
         fields="id",
-    ).execute()
+    ).execute())
     log.info(f"[{course}] Excel uploaded to Drive: {created['id']}")
     return created["id"]
 
@@ -630,12 +644,12 @@ def _list_drive_codes_in_folder(drive, folder_path, log):
     result = {}
     page_token = None
     while True:
-        resp = drive.svc.files().list(
+        resp = _drive_call_with_retry(lambda: drive.svc.files().list(
             q=f"'{folder_id}' in parents and trashed=false",
             fields="nextPageToken,files(id,name)",
             pageSize=1000,
             pageToken=page_token,
-        ).execute()
+        ).execute())
         for f in resp.get("files", []):
             m = re.match(r"^(\d{5,7})", f["name"])
             if m:
